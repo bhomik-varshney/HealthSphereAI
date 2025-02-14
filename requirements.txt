@@ -3,3 +3,5 @@ argparse
 pandas
 langchain_groq
 langgraph
+langchain
+folium
