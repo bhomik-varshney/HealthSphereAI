@@ -8,3 +8,4 @@ folium
 streamlit-folium
 pdfplumber
 pytesseract
+spacy
