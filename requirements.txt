@@ -5,3 +5,5 @@ langchain_groq
 langgraph
 langchain
 folium
+streamlit-folium
+pdfplumber
