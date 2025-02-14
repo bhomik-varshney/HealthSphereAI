@@ -1,10 +1,8 @@
-import argparse
 import os
-import sys
+import time
 from playwright.sync_api import sync_playwright
-from dataclasses import dataclass, asdict, field
 import pandas as pd
-
+from dataclasses import dataclass, asdict, field
 
 @dataclass
 class Business:
@@ -14,84 +12,55 @@ class Business:
     website: str
     address: str
 
-
 @dataclass
 class BusinessList:
-    """Holds list of Business objects, saves to Excel and CSV"""
+    """Holds list of Business objects, saves to CSV"""
     business_list: list = field(default_factory=list)
     save_at = 'output'
 
     def dataframe(self):
         return pd.DataFrame([asdict(business) for business in self.business_list])
 
-    def save_to_excel(self, filename):
-        if not os.path.exists(self.save_at):
-            os.makedirs(self.save_at)
-        self.dataframe().to_excel(f"output/{filename}.xlsx", index=False)
-
     def save_to_csv(self, filename):
         if not os.path.exists(self.save_at):
             os.makedirs(self.save_at)
-        self.dataframe().to_csv(f"output/{filename}.csv", index=False)
+        filepath = f"{self.save_at}/{filename}.csv"
+        self.dataframe().to_csv(filepath, index=False)
+        return filepath  # Return the saved file path
 
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-s", "--search", type=str, default="hospitals in India", help="Search term for Google Maps.")
-    parser.add_argument("-t", "--total", type=int, help="Total number of results to scrape (default is 100).")
-    args = parser.parse_args()
-
-    search_list = [args.search] if args.search else ["hospitals in India"]
-    total = args.total if args.total else 100
-
+def scrape_hospitals(location: str, search_type="hospitals in or near"):
+    """Scrapes hospital data and saves to CSV"""
+    filename = f"hospitals_data_{search_type}_{location.replace(' ', '_')}"
+    
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
+        browser = p.chromium.launch(headless=True)  # Run in headless mode
         page = browser.new_page()
         page.goto("https://www.google.com/maps", timeout=60000)
-        page.wait_for_timeout(2000)
+        time.sleep(2)
 
-        for search_for in search_list:
-            print(f"Scraping: {search_for}")
-            page.locator('//input[@id="searchboxinput"]').fill(search_for)
-            page.keyboard.press("Enter")
-            page.wait_for_timeout(2000)
+        print(f"Scraping: {location}")
+        page.locator('//input[@id="searchboxinput"]').fill(f"{search_type} {location}")
+        page.keyboard.press("Enter")
+        time.sleep(5)
 
-            previously_counted = 0
-            while True:
-                page.mouse.wheel(0, 5000)
-                page.wait_for_timeout(2000)
-                listings = page.locator('//a[contains(@href, "https://www.google.com/maps/place")]').all()
-                if len(listings) >= total or len(listings) == previously_counted:
-                    break
-                previously_counted = len(listings)
+        listings = page.locator('//a[contains(@href, "https://www.google.com/maps/place")]').all()
+        
+        business_list = BusinessList()
+        for listing in listings[:10]:  # Scrape only first 10 results for speed
+            try:
+                listing.click()
+                time.sleep(2)
 
-            business_list = BusinessList()
-            for listing in listings[:total]:
-                try:
-                    listing.click()
-                    page.wait_for_timeout(2000)
-
-                    business = Business(
-                        name=listing.get_attribute('aria-label') or "",
-                        phone_number=page.locator(
-                            '//button[contains(@data-item-id, "phone:tel:")]//div[contains(@class, "fontBodyMedium")]').inner_text() if page.locator(
-                            '//button[contains(@data-item-id, "phone:tel:")]//div[contains(@class, "fontBodyMedium")]').count() > 0 else "",
-                        website=page.locator(
-                            '//a[@data-item-id="authority"]//div[contains(@class, "fontBodyMedium")]').inner_text() if page.locator(
-                            '//a[@data-item-id="authority"]//div[contains(@class, "fontBodyMedium")]').count() > 0 else "",
-                        address=page.locator(
-                            '//button[@data-item-id="address"]//div[contains(@class, "fontBodyMedium")]').inner_text() if page.locator(
-                            '//button[@data-item-id="address"]//div[contains(@class, "fontBodyMedium")]').count() > 0 else ""
-                    )
-                    business_list.business_list.append(business)
-                except Exception as e:
-                    print(f'Error occurred: {e}')
-
-            business_list.save_to_excel(f"hospitals_data_{search_for}".replace(' ', '_'))
-            business_list.save_to_csv(f"hospitals_data_{search_for}".replace(' ', '_'))
-
+                business = Business(
+                    name=listing.get_attribute('aria-label') or "N/A",
+                    phone_number=page.locator('//button[contains(@data-item-id, "phone:tel:")]//div').inner_text() if page.locator('//button[contains(@data-item-id, "phone:tel:")]//div').count() > 0 else "N/A",
+                    website=page.locator('//a[@data-item-id="authority"]//div').inner_text() if page.locator('//a[@data-item-id="authority"]//div').count() > 0 else "N/A",
+                    address=page.locator('//button[@data-item-id="address"]//div').inner_text() if page.locator('//button[@data-item-id="address"]//div').count() > 0 else "N/A"
+                )
+                business_list.business_list.append(business)
+            except Exception as e:
+                print(f'Error occurred: {e}')
+        
         browser.close()
-
-
-if __name__ == "__main__":
-    main()
+    
+    return business_list.save_to_csv(filename)  # Return file path
