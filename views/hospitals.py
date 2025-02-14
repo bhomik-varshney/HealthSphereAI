@@ -3,7 +3,7 @@ import streamlit as st
 import folium
 from streamlit_folium import st_folium
 import requests
-from myscraper import scrape_hospitals  # Import the scraper function
+from scraper import scrape_hospitals  # Import the scraper function
 
 st.html(f"""<h1 style="font-size:50px;margin-top:0px;margin-bottom:0px;text-align:center;
     font-family: 'Georgia', serif; font-weight: bold;">Hospital Finder</h1>""")
